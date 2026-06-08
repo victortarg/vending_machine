@@ -4,97 +4,121 @@ use IEEE.NUMERIC_STD.ALL;
 
 entity vending_machine is
     Port (
-        clk      : in  std_logic;
-        rst      : in  std_logic;
-        a1       : in  std_logic; -- Moeda R$ 0,25
-        a2       : in  std_logic; -- Moeda R$ 0,50
-        a3       : in  std_logic; -- Moeda R$ 1,00
-        t        : in  std_logic_vector(2 downto 0); -- Selecao do produto
-        s        : in  std_logic_vector(7 downto 0); -- Valor do produto
-        disp     : out std_logic_vector(7 downto 0); -- Saida do Dispenser
-        troco    : out std_logic; -- Saida da moeda de troco
+        clock               : in  std_logic;
+        reset               : in  std_logic;
         
-        -- Sinais expostos APENAS para o professor ver na simulação:
-        estado_atual    : out integer; 
-        total_acumulado : out integer
+        -- Entradas de Pagamento (Moedas)
+        moeda_25_centavos   : in  std_logic; 
+        moeda_50_centavos   : in  std_logic; 
+        moeda_1_real        : in  std_logic; 
+        
+        -- Entradas de Configuração do Produto
+        seletor_produto     : in  std_logic_vector(2 downto 0); -- Escolhe qual dos 8 produtos
+        preco_produto       : in  std_logic_vector(7 downto 0); -- Preço configurado para os produtos
+        
+        -- Saídas Físicas da Máquina
+        libera_produto      : out std_logic_vector(7 downto 0); -- Aciona o dispenser do produto escolhido
+        libera_moeda_troco  : out std_logic;                    -- Libera uma moeda de R$ 0,25 de troco
+        
+        -- Sinais de Monitoramento (Apenas para facilitar a visualização na Simulação VWF)
+        monitor_estado      : out integer; 
+        monitor_total       : out integer
     );
 end vending_machine;
 
 architecture RTL of vending_machine is
+    
+    -- Definição dos Estados da Máquina (Bloco de Controle)
     type state_type is (INICIO, ESPERAR, SOMAR_25, SOMAR_50, SOMAR_100, FORNECER, VERIFICAR_TROCO, DAR_TROCO);
-    signal state, next_state : state_type;
-    signal tot, next_tot : integer range 0 to 255;
+    signal estado_atual_fsm, proximo_estado_fsm : state_type;
+    
+    -- Registrador Acumulador (Bloco Operacional)
+    signal total_inserido, proximo_total : integer range 0 to 255;
+    
 begin
 
-    -- Expõe os sinais internos para a Waveform
-    estado_atual <= state_type'pos(state); -- Mostra o estado como um número (0 a 7)
-    total_acumulado <= tot;                -- Mostra o valor no acumulador
+    -- Conecta os sinais internos às saídas de monitoramento para o gráfico do Quartus
+    monitor_estado <= state_type'pos(estado_atual_fsm); -- Converte o nome do estado para número (0 a 7)
+    monitor_total  <= total_inserido;                   -- Mostra o dinheiro acumulado
 
-    SYNC_PROC: process (clk, rst)
+    -- PROCESSO 1: Atualização Síncrona (Registradores)
+    SYNC_PROC: process (clock, reset)
     begin
-        if rst = '1' then
-            state <= INICIO;
-            tot <= 0;
-        elsif rising_edge(clk) then
-            state <= next_state;
-            tot <= next_tot;
+        if reset = '1' then
+            estado_atual_fsm <= INICIO;
+            total_inserido <= 0;
+        elsif rising_edge(clock) then
+            estado_atual_fsm <= proximo_estado_fsm;
+            total_inserido <= proximo_total;
         end if;
     end process;
 
-    COMB_PROC: process (state, tot, a1, a2, a3, t, s)
-        variable s_int : integer range 0 to 255;
+    -- PROCESSO 2: Lógica Combinacional (Transições de Estado e Matemática)
+    COMB_PROC: process (estado_atual_fsm, total_inserido, moeda_25_centavos, moeda_50_centavos, moeda_1_real, seletor_produto, preco_produto)
+        variable preco_inteiro : integer range 0 to 255;
     begin
-        next_state <= state;
-        next_tot <= tot;
-        disp <= (others => '0');
-        troco <= '0';
+        -- Valores padrão para evitar a criação de memórias indesejadas (latches)
+        proximo_estado_fsm <= estado_atual_fsm;
+        proximo_total <= total_inserido;
+        libera_produto <= (others => '0');
+        libera_moeda_troco <= '0';
         
-        s_int := to_integer(unsigned(s));
+        -- Converte o vetor de bits do preço para um número inteiro para facilitar a matemática
+        preco_inteiro := to_integer(unsigned(preco_produto));
 
-        case state is
+        case estado_atual_fsm is
+            
             when INICIO =>
-                next_tot <= 0;
-                next_state <= ESPERAR;
+                proximo_total <= 0;
+                proximo_estado_fsm <= ESPERAR;
 
             when ESPERAR =>
-                if tot >= s_int and s_int > 0 then
-                    next_state <= FORNECER;
-                elsif a1 = '1' then
-                    next_state <= SOMAR_25;
-                elsif a2 = '1' then
-                    next_state <= SOMAR_50;
-                elsif a3 = '1' then
-                    next_state <= SOMAR_100;
+                -- Verifica se já tem dinheiro suficiente para comprar
+                if total_inserido >= preco_inteiro and preco_inteiro > 0 then
+                    proximo_estado_fsm <= FORNECER;
+                
+                -- Se não tem dinheiro suficiente, aguarda a inserção de moedas
+                elsif moeda_25_centavos = '1' then
+                    proximo_estado_fsm <= SOMAR_25;
+                elsif moeda_50_centavos = '1' then
+                    proximo_estado_fsm <= SOMAR_50;
+                elsif moeda_1_real = '1' then
+                    proximo_estado_fsm <= SOMAR_100;
                 end if;
 
             when SOMAR_25 =>
-                next_tot <= tot + 25;
-                next_state <= ESPERAR;
+                proximo_total <= total_inserido + 25;
+                proximo_estado_fsm <= ESPERAR;
 
             when SOMAR_50 =>
-                next_tot <= tot + 50;
-                next_state <= ESPERAR;
+                proximo_total <= total_inserido + 50;
+                proximo_estado_fsm <= ESPERAR;
 
             when SOMAR_100 =>
-                next_tot <= tot + 100;
-                next_state <= ESPERAR;
+                proximo_total <= total_inserido + 100;
+                proximo_estado_fsm <= ESPERAR;
 
             when FORNECER =>
-                disp(to_integer(unsigned(t))) <= '1';
-                next_tot <= tot - s_int;
-                next_state <= VERIFICAR_TROCO;
+                -- Ativa apenas o bit correspondente ao produto selecionado
+                libera_produto(to_integer(unsigned(seletor_produto))) <= '1';
+                
+                -- Deduz o preço do produto do valor total inserido
+                proximo_total <= total_inserido - preco_inteiro;
+                proximo_estado_fsm <= VERIFICAR_TROCO;
 
             when VERIFICAR_TROCO =>
-                if tot > 0 then
-                    next_state <= DAR_TROCO;
+                -- Se ainda sobrou dinheiro, vai para o estado de devolver troco
+                if total_inserido > 0 then
+                    proximo_estado_fsm <= DAR_TROCO;
                 else
-                    next_state <= INICIO;
+                    proximo_estado_fsm <= INICIO;
                 end if;
 
             when DAR_TROCO =>
-                troco <= '1';
-                next_tot <= tot - 25;
-                next_state <= VERIFICAR_TROCO;
+                libera_moeda_troco <= '1';
+                proximo_total <= total_inserido - 25; -- Deduz a moeda devolvida
+                proximo_estado_fsm <= VERIFICAR_TROCO;
+                
         end case;
     end process;
 end RTL;
