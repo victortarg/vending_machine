@@ -1,7 +1,3 @@
-/*
-Codigo para testar fora da DE0
-*/
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
@@ -16,22 +12,24 @@ entity vending_machine is
         t        : in  std_logic_vector(2 downto 0); -- Selecao do produto
         s        : in  std_logic_vector(7 downto 0); -- Valor do produto
         disp     : out std_logic_vector(7 downto 0); -- Saida do Dispenser
-        troco    : out std_logic  -- Saida da moeda de troco
+        troco    : out std_logic; -- Saida da moeda de troco
+        
+        -- Sinais expostos APENAS para o professor ver na simulação:
+        estado_atual    : out integer; 
+        total_acumulado : out integer
     );
 end vending_machine;
 
 architecture RTL of vending_machine is
-    -- Definicao dos Estados (Bloco de Controle)
     type state_type is (INICIO, ESPERAR, SOMAR_25, SOMAR_50, SOMAR_100, FORNECER, VERIFICAR_TROCO, DAR_TROCO);
     signal state, next_state : state_type;
-    
-    -- Sinais do Bloco Operacional
     signal tot, next_tot : integer range 0 to 255;
-    
 begin
 
-    -- PROCESSO 1: Registradores (Sincrono)
-    -- Atualiza o estado e o acumulador (tot) a cada subida de clock
+    -- Expõe os sinais internos para a Waveform
+    estado_atual <= state_type'pos(state); -- Mostra o estado como um número (0 a 7)
+    total_acumulado <= tot;                -- Mostra o valor no acumulador
+
     SYNC_PROC: process (clk, rst)
     begin
         if rst = '1' then
@@ -43,18 +41,14 @@ begin
         end if;
     end process;
 
-    -- PROCESSO 2: Logica Combinacional (Bloco de Controle + Operacional)
-    -- Define as transicoes de estado e as operacoes matematicas
     COMB_PROC: process (state, tot, a1, a2, a3, t, s)
         variable s_int : integer range 0 to 255;
     begin
-        -- Valores padrao para evitar latches
         next_state <= state;
         next_tot <= tot;
         disp <= (others => '0');
         troco <= '0';
         
-        -- Converte o valor do produto de binario para inteiro
         s_int := to_integer(unsigned(s));
 
         case state is
@@ -63,7 +57,7 @@ begin
                 next_state <= ESPERAR;
 
             when ESPERAR =>
-                if tot >= s_int then
+                if tot >= s_int and s_int > 0 then
                     next_state <= FORNECER;
                 elsif a1 = '1' then
                     next_state <= SOMAR_25;
@@ -86,7 +80,6 @@ begin
                 next_state <= ESPERAR;
 
             when FORNECER =>
-                -- Ativa o bit correspondente ao produto selecionado 't'
                 disp(to_integer(unsigned(t))) <= '1';
                 next_tot <= tot - s_int;
                 next_state <= VERIFICAR_TROCO;
@@ -102,8 +95,6 @@ begin
                 troco <= '1';
                 next_tot <= tot - 25;
                 next_state <= VERIFICAR_TROCO;
-                
         end case;
     end process;
-
 end RTL;
