@@ -108,7 +108,7 @@ begin
 
             when VERIFICAR_TROCO =>
                 -- Se ainda sobrou dinheiro, vai para o estado de devolver troco
-                if total_inserido > 0 then
+                if total_inserido >= 25 then
                     proximo_estado_fsm <= DAR_TROCO;
                 else
                     proximo_estado_fsm <= INICIO;

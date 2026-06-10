@@ -1,0 +1,11 @@
+
+State Machine - |vending_machine|estado_atual_fsm
+Name estado_atual_fsm.DAR_TROCO estado_atual_fsm.VERIFICAR_TROCO estado_atual_fsm.FORNECER estado_atual_fsm.SOMAR_100 estado_atual_fsm.SOMAR_50 estado_atual_fsm.SOMAR_25 estado_atual_fsm.ESPERAR estado_atual_fsm.INICIO 
+estado_atual_fsm.INICIO 0 0 0 0 0 0 0 0 
+estado_atual_fsm.ESPERAR 0 0 0 0 0 0 1 1 
+estado_atual_fsm.SOMAR_25 0 0 0 0 0 1 0 1 
+estado_atual_fsm.SOMAR_50 0 0 0 0 1 0 0 1 
+estado_atual_fsm.SOMAR_100 0 0 0 1 0 0 0 1 
+estado_atual_fsm.FORNECER 0 0 1 0 0 0 0 1 
+estado_atual_fsm.VERIFICAR_TROCO 0 1 0 0 0 0 0 1 
+estado_atual_fsm.DAR_TROCO 1 0 0 0 0 0 0 1 
